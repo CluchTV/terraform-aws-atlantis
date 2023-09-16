@@ -460,8 +460,14 @@ module "ecs" {
   source  = "terraform-aws-modules/ecs/aws"
   version = "v5.2.2"
 
-
   cluster_name = var.name
+
+  create_task_exec_iam_role = true
+  task_exec_iam_role_name   = "ecs-task-exec-role-atlantis"
+  task_exec_ssm_param_arns = [
+    aws_ssm_parameter.webhook,
+    aws_ssm_parameter.atlantis_github_app_key,
+  ]
 
   fargate_capacity_providers = {
     FARGATE_SPOT = {
@@ -479,95 +485,6 @@ module "ecs" {
   tags = local.tags
 }
 
-data "aws_iam_policy_document" "ecs_tasks" {
-  statement {
-    actions = [
-      "sts:AssumeRole",
-    ]
-
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = compact(distinct(concat(["ecs-tasks.amazonaws.com"], var.trusted_principals)))
-    }
-
-    dynamic "principals" {
-      for_each = length(var.trusted_entities) > 0 ? [true] : []
-
-      content {
-        type        = "AWS"
-        identifiers = var.trusted_entities
-      }
-    }
-  }
-}
-
-resource "aws_iam_role" "ecs_task_execution" {
-  name                 = "${var.name}-ecs_task_execution"
-  assume_role_policy   = data.aws_iam_policy_document.ecs_tasks.json
-  max_session_duration = var.max_session_duration
-  permissions_boundary = var.permissions_boundary
-  path                 = var.path
-
-  tags = local.tags
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  for_each = toset(local.policies_arn)
-
-  role       = aws_iam_role.ecs_task_execution.id
-  policy_arn = each.value
-}
-
-# ref: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/specifying-sensitive-data.html
-data "aws_iam_policy_document" "ecs_task_access_secrets" {
-  statement {
-    effect = "Allow"
-
-    resources = flatten([
-      aws_ssm_parameter.webhook[*].arn,
-      aws_ssm_parameter.atlantis_github_app_key[*].arn,
-      try(var.repository_credentials["credentialsParameter"], [])
-    ])
-
-    actions = [
-      "ssm:GetParameters",
-      "secretsmanager:GetSecretValue",
-    ]
-  }
-}
-
-data "aws_iam_policy_document" "ecs_task_access_secrets_with_kms" {
-  count = var.ssm_kms_key_arn == "" ? 0 : 1
-
-  source_policy_documents = [data.aws_iam_policy_document.ecs_task_access_secrets.json]
-
-  statement {
-    sid       = "AllowKMSDecrypt"
-    effect    = "Allow"
-    actions   = ["kms:Decrypt"]
-    resources = [var.ssm_kms_key_arn]
-  }
-}
-
-resource "aws_iam_role_policy" "ecs_task_access_secrets" {
-  count = local.has_secrets ? 1 : 0
-
-  name = "ECSTaskAccessSecretsPolicy"
-
-  role = aws_iam_role.ecs_task_execution.id
-
-  policy = element(
-    compact(
-      concat(
-        data.aws_iam_policy_document.ecs_task_access_secrets_with_kms[*].json,
-        data.aws_iam_policy_document.ecs_task_access_secrets[*].json,
-      ),
-    ),
-    0,
-  )
-}
 
 module "container_definition_github" {
   source  = "cloudposse/ecs-container-definition/aws"
