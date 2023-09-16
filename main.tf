@@ -465,8 +465,8 @@ module "ecs" {
   create_task_exec_iam_role = true
   task_exec_iam_role_name   = "ecs-task-exec-role-atlantis"
   task_exec_ssm_param_arns = [
-    aws_ssm_parameter.webhook,
-    aws_ssm_parameter.atlantis_github_app_key,
+    aws_ssm_parameter.webhook.arn,
+    aws_ssm_parameter.atlantis_github_app_key.arn,
   ]
 
   fargate_capacity_providers = {
