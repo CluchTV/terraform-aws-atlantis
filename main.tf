@@ -14,7 +14,7 @@ locals {
   )}"
   atlantis_url_events = "${local.atlantis_url}/events"
 
-  # Include only one group of secrets - for github, github app,  gitlab or bitbucket
+  # Include only one group of secrets - for github, github app, or bitbucket
   has_secrets = try(coalesce(var.atlantis_gitlab_user_token, var.atlantis_github_user_token, var.atlantis_github_app_key, var.atlantis_bitbucket_user_token) != "", false)
 
   # token/key
@@ -31,16 +31,12 @@ locals {
   ecs_cluster_id = var.create_ecs_cluster ? module.ecs.ecs_cluster_id : var.ecs_cluster_id
 
   # Container definitions
-  container_definitions = var.custom_container_definitions == "" ? var.atlantis_bitbucket_user_token != "" ? jsonencode(concat([module.container_definition_bitbucket.json_map_object], var.extra_container_definitions)) : jsonencode(concat([module.container_definition_github_gitlab.json_map_object], var.extra_container_definitions)) : var.custom_container_definitions
+  container_definitions = jsonencode(concat([module.container_definition_github.json_map_object], var.extra_container_definitions))
 
   container_definition_environment = [
     {
       name  = "ATLANTIS_ALLOW_REPO_CONFIG"
       value = var.allow_repo_config
-    },
-    {
-      name  = "ATLANTIS_GITLAB_HOSTNAME"
-      value = var.atlantis_gitlab_hostname
     },
     {
       name  = "ATLANTIS_LOG_LEVEL"
@@ -57,18 +53,6 @@ locals {
     {
       name  = "ATLANTIS_GH_USER"
       value = var.atlantis_github_user
-    },
-    {
-      name  = "ATLANTIS_GITLAB_USER"
-      value = var.atlantis_gitlab_user
-    },
-    {
-      name  = "ATLANTIS_BITBUCKET_USER"
-      value = var.atlantis_bitbucket_user
-    },
-    {
-      name  = "ATLANTIS_BITBUCKET_BASE_URL"
-      value = var.atlantis_bitbucket_base_url
     },
     {
       name  = "ATLANTIS_REPO_ALLOWLIST"
@@ -155,7 +139,7 @@ resource "random_id" "webhook" {
 }
 
 resource "aws_ssm_parameter" "webhook" {
-  count = var.atlantis_bitbucket_user_token != "" ? 0 : 1
+  count = 1
 
   name  = var.webhook_ssm_parameter_name
   type  = "SecureString"
@@ -170,26 +154,6 @@ resource "aws_ssm_parameter" "atlantis_github_user_token" {
   name  = var.atlantis_github_user_token_ssm_parameter_name
   type  = "SecureString"
   value = var.atlantis_github_user_token
-
-  tags = local.tags
-}
-
-resource "aws_ssm_parameter" "atlantis_gitlab_user_token" {
-  count = var.atlantis_gitlab_user_token != "" ? 1 : 0
-
-  name  = var.atlantis_gitlab_user_token_ssm_parameter_name
-  type  = "SecureString"
-  value = var.atlantis_gitlab_user_token
-
-  tags = local.tags
-}
-
-resource "aws_ssm_parameter" "atlantis_bitbucket_user_token" {
-  count = var.atlantis_bitbucket_user_token != "" ? 1 : 0
-
-  name  = var.atlantis_bitbucket_user_token_ssm_parameter_name
-  type  = "SecureString"
-  value = var.atlantis_bitbucket_user_token
 
   tags = local.tags
 }
@@ -210,7 +174,7 @@ resource "aws_ssm_parameter" "atlantis_github_app_key" {
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "v3.6.0"
+  version = "v5.1.2"
 
   create_vpc = var.vpc_id == ""
 
@@ -237,7 +201,7 @@ module "vpc" {
 ################################################################################
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "v6.5.0"
+  version = "v8.7.0"
 
   name     = var.name
   internal = var.internal
@@ -344,7 +308,7 @@ resource "aws_lb_listener_rule" "unauthenticated_access_for_webhook" {
 ################################################################################
 module "alb_https_sg" {
   source  = "terraform-aws-modules/security-group/aws//modules/https-443"
-  version = "v4.3.0"
+  version = "v5.1.0"
 
   name        = "${var.name}-alb-https"
   vpc_id      = local.vpc_id
@@ -358,7 +322,7 @@ module "alb_https_sg" {
 
 module "alb_http_sg" {
   source  = "terraform-aws-modules/security-group/aws//modules/http-80"
-  version = "v4.3.0"
+  version = "v5.1.0"
 
   name        = "${var.name}-alb-http"
   vpc_id      = local.vpc_id
@@ -371,7 +335,7 @@ module "alb_http_sg" {
 
 module "atlantis_sg" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "v4.3.0"
+  version = "v5.1.0"
 
   name        = var.name
   vpc_id      = local.vpc_id
@@ -394,7 +358,7 @@ module "atlantis_sg" {
 
 module "efs_sg" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "v4.8.0"
+  version = "v5.1.0"
   count   = var.enable_ephemeral_storage ? 0 : 1
 
   name        = "${var.name}-efs"
@@ -414,7 +378,7 @@ module "efs_sg" {
 ################################################################################
 module "acm" {
   source  = "terraform-aws-modules/acm/aws"
-  version = "v3.2.0"
+  version = "v4.3.2"
 
   create_certificate = var.certificate_arn == ""
 
@@ -507,20 +471,27 @@ resource "aws_efs_access_point" "this" {
 ################################################################################
 module "ecs" {
   source  = "terraform-aws-modules/ecs/aws"
-  version = "v3.3.0"
+  version = "v5.2.2"
 
-  create_ecs = var.create_ecs_cluster
 
-  name               = var.name
-  container_insights = var.ecs_container_insights
+  cluster_name = var.name
 
-  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+  cluster_settings = {
+    containerInsights = var.ecs_container_insights ? "enabled" : "disabled"
+  }
 
-  default_capacity_provider_strategy = [
-    {
-      capacity_provider = var.ecs_fargate_spot ? "FARGATE_SPOT" : "FARGATE"
+  fargate_capacity_providers = {
+    FARGATE_SPOT = {
+      default_capacity_provider_strategy = {
+        weight = 1
+      }
     }
-  ]
+    FARGATE = {
+      default_capacity_provider_strategy = {
+        weight = 0
+      }
+    }
+  }
 
   tags = local.tags
 }
@@ -574,8 +545,6 @@ data "aws_iam_policy_document" "ecs_task_access_secrets" {
     resources = flatten([
       aws_ssm_parameter.webhook[*].arn,
       aws_ssm_parameter.atlantis_github_user_token[*].arn,
-      aws_ssm_parameter.atlantis_gitlab_user_token[*].arn,
-      aws_ssm_parameter.atlantis_bitbucket_user_token[*].arn,
       aws_ssm_parameter.atlantis_github_app_key[*].arn,
       try(var.repository_credentials["credentialsParameter"], [])
     ])
@@ -590,7 +559,7 @@ data "aws_iam_policy_document" "ecs_task_access_secrets" {
 data "aws_iam_policy_document" "ecs_task_access_secrets_with_kms" {
   count = var.ssm_kms_key_arn == "" ? 0 : 1
 
-  source_json = data.aws_iam_policy_document.ecs_task_access_secrets.json
+  source_policy_documents = [data.aws_iam_policy_document.ecs_task_access_secrets.json]
 
   statement {
     sid       = "AllowKMSDecrypt"
@@ -618,9 +587,9 @@ resource "aws_iam_role_policy" "ecs_task_access_secrets" {
   )
 }
 
-module "container_definition_github_gitlab" {
+module "container_definition_github" {
   source  = "cloudposse/ecs-container-definition/aws"
-  version = "v0.58.1"
+  version = "v0.60.0"
 
   container_name  = var.name
   container_image = local.atlantis_image
@@ -671,62 +640,6 @@ module "container_definition_github_gitlab" {
   secrets = concat(
     local.container_definition_secrets_1,
     local.container_definition_secrets_2,
-    var.custom_environment_secrets,
-  )
-}
-
-module "container_definition_bitbucket" {
-  source  = "cloudposse/ecs-container-definition/aws"
-  version = "v0.58.1"
-
-  container_name  = var.name
-  container_image = local.atlantis_image
-
-  container_cpu                = var.container_cpu != null ? var.container_cpu : var.ecs_task_cpu
-  container_memory             = var.container_memory != null ? var.container_memory : var.ecs_task_memory
-  container_memory_reservation = var.container_memory_reservation
-
-  user                     = var.user
-  ulimits                  = var.ulimits
-  entrypoint               = var.entrypoint
-  command                  = var.command
-  working_directory        = var.working_directory
-  repository_credentials   = var.repository_credentials
-  docker_labels            = var.docker_labels
-  start_timeout            = var.start_timeout
-  stop_timeout             = var.stop_timeout
-  container_depends_on     = var.container_depends_on
-  essential                = var.essential
-  readonly_root_filesystem = var.readonly_root_filesystem
-  mount_points             = var.mount_points
-  volumes_from             = var.volumes_from
-
-  port_mappings = [
-    {
-      containerPort = var.atlantis_port
-      hostPort      = var.atlantis_port
-      protocol      = "tcp"
-    },
-  ]
-
-  log_configuration = {
-    logDriver = "awslogs"
-    options = {
-      awslogs-region        = data.aws_region.current.name
-      awslogs-group         = aws_cloudwatch_log_group.atlantis.name
-      awslogs-stream-prefix = "ecs"
-    }
-    secretOptions = []
-  }
-  firelens_configuration = var.firelens_configuration
-
-  environment = concat(
-    local.container_definition_environment,
-    var.custom_environment_variables,
-  )
-
-  secrets = concat(
-    local.container_definition_secrets_1,
     var.custom_environment_secrets,
   )
 }
