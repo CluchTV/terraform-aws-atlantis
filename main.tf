@@ -35,10 +35,6 @@ locals {
 
   container_definition_environment = [
     {
-      name  = "ATLANTIS_ALLOW_REPO_CONFIG"
-      value = var.allow_repo_config
-    },
-    {
       name  = "ATLANTIS_LOG_LEVEL"
       value = var.atlantis_log_level
     },
