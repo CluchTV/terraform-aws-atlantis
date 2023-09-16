@@ -449,6 +449,54 @@ resource "aws_efs_access_point" "this" {
   }
 }
 
+############################## TASK ROLE POLICY ##############################
+data "aws_iam_policy_document" "task_role" {
+  statement {
+    actions = [
+      "logs:*",
+      "cloudwatch:*",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:CreateControlChannel"
+    ]
+    resources = [
+      "*"
+    ]
+    effect = "Allow"
+  }
+}
+
+resource "aws_iam_policy" "task_role" {
+  name   = "task_role"
+  policy = data.aws_iam_policy_document.task_role.json
+}
+
+########################### ECS TASK ROLE ############################
+resource "aws_iam_role" "ecs_task_role" {
+  name                  = "ecs_task_role"
+  force_detach_policies = true
+  assume_role_policy    = <<EOF
+{
+  "Version": "2008-10-17",
+  "Statement": [
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ecs-tasks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_role_task_policy" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.task_role.arn
+}
 ################################################################################
 # ECS
 ################################################################################
@@ -543,7 +591,7 @@ resource "aws_ecs_task_definition" "atlantis" {
   family = var.name
   # TODO make into two separate roles
   execution_role_arn       = module.ecs.task_exec_iam_role_arn
-  task_role_arn            = module.ecs.task_exec_iam_role_arn
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.ecs_task_cpu
