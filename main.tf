@@ -28,7 +28,7 @@ locals {
   alb_authentication_method = length(keys(var.alb_authenticate_oidc)) > 0 ? "authenticate-oidc" : length(keys(var.alb_authenticate_cognito)) > 0 ? "authenticate-cognito" : "forward"
 
   # ECS - existing or new?
-  ecs_cluster_id = var.create_ecs_cluster ? module.ecs.ecs_cluster_id : var.ecs_cluster_id
+  ecs_cluster_id = var.create_ecs_cluster ? module.ecs.cluster_id : var.ecs_cluster_id
 
   # Container definitions
   container_definitions = jsonencode(concat([module.container_definition_github.json_map_object], var.extra_container_definitions))
