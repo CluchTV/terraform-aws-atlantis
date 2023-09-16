@@ -476,10 +476,6 @@ module "ecs" {
 
   cluster_name = var.name
 
-  cluster_settings = {
-    containerInsights = var.ecs_container_insights ? "enabled" : "disabled"
-  }
-
   fargate_capacity_providers = {
     FARGATE_SPOT = {
       default_capacity_provider_strategy = {
