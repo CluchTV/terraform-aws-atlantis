@@ -518,7 +518,7 @@ variable "volumes_from" {
 variable "user" {
   description = "The user to run as inside the container. Must be in the uid:gid or the default (null) will use the container's configured `USER` directive or root if not set."
   type        = string
-  default     = null
+  default     = "100:1000"
   validation {
     condition     = can(regex("[0-9]+:[0-9]+", var.user)) || var.user == null
     error_message = "User variable must be in the uid:gid format or null."
@@ -729,7 +729,7 @@ variable "ecs_service_enable_execute_command" {
 variable "enable_ephemeral_storage" {
   description = "Enable to use Fargate Ephemeral Storage"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "ephemeral_storage_size" {
