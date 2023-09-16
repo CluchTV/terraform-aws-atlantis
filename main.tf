@@ -135,8 +135,6 @@ resource "random_id" "webhook" {
 }
 
 resource "aws_ssm_parameter" "webhook" {
-  count = 1
-
   name  = var.webhook_ssm_parameter_name
   type  = "SecureString"
   value = coalesce(var.atlantis_github_webhook_secret, join("", random_id.webhook[*].hex))
@@ -146,8 +144,6 @@ resource "aws_ssm_parameter" "webhook" {
 
 
 resource "aws_ssm_parameter" "atlantis_github_app_key" {
-  count = var.atlantis_github_app_key != "" ? 1 : 0
-
   name  = var.atlantis_github_app_key_ssm_parameter_name
   type  = "SecureString"
   value = var.atlantis_github_app_key
