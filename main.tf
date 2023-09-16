@@ -544,9 +544,10 @@ module "container_definition_github" {
 }
 
 resource "aws_ecs_task_definition" "atlantis" {
-  family                   = var.name
-  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
-  task_role_arn            = aws_iam_role.ecs_task_execution.arn
+  family = var.name
+  # TODO make into two separate roles
+  execution_role_arn       = module.ecs.task_exec_iam_role_arn
+  task_role_arn            = module.ecs.task_exec_iam_role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.ecs_task_cpu
